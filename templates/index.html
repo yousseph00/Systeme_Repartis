@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Supervision M1SRIV Groupe 4</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0d1117; color: #e6edf3; }
+        .card { background-color: #161b22; border: 1px solid #30363d; color: white; margin-bottom: 20px; }
+        .status-up { color: #238636; }
+        .status-down { color: #da3633; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2 class="mb-4">🖥️ Supervision Réseau - Dashboard Temps Réel - Groupe 4 </h2>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card p-3">
+                    <h5>Évolution Charge CPU & RAM (%)</h5>
+                    <canvas id="metricsChart"></canvas>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-3">
+                    <h5>Derniers Nœuds Actifs</h5>
+                    <div id="nodes-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    const socket = io();
+    const ctx = document.getElementById('metricsChart').getContext('2d');
+    
+    // Initialisation du graphique
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{ label: 'CPU %', borderColor: '#58a6ff', data: [], tension: 0.3 },
+                       { label: 'RAM %', borderColor: '#bc8cff', data: [], tension: 0.3 }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+
+    socket.on('update_metrics', function(data) {
+        const nodesList = document.getElementById('nodes-list');
+        nodesList.innerHTML = '';
+        
+        if (data.length > 0) {
+            const latest = data[0];
+            const now = latest.timestamp;
+            
+            // Mise à jour graphique (Max 15 points)
+            if (chart.data.labels.length > 15) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+                chart.data.datasets[1].data.shift();
+            }
+            chart.data.labels.push(now);
+            chart.data.datasets[0].data.push(latest.cpu_usage);
+            chart.data.datasets[1].data.push(latest.mem_usage);
+            chart.update();
+        }
+
+        // Affichage détaillé de chaque nœud
+        data.forEach(node => {
+            // Analyse du JSON des services
+            let services = JSON.parse(node.status_services);
+            let serviceBadges = '';
+            for (let s in services) {
+                let color = services[s] === "OK" ? "badge bg-success" : "badge bg-danger";
+                serviceBadges += `<span class="${color} me-1" style="font-size: 0.7em;">${s}</span>`;
+            }
+
+            nodesList.innerHTML += `
+                <div class="card p-2 mb-2" style="background-color: #1c2128; font-size: 0.9em;">
+                    <div class="d-flex justify-content-between">
+                        <strong class="text-info">${node.node_id}</strong>
+                        <span class="text-secondary small">${node.timestamp}</span>
+                    </div>
+                    <div class="small">
+                        💻 <i>${node.os_info}</i> | ⏱️ Uptime: ${node.uptime}s<br>
+                        📊 CPU: <b>${node.cpu_usage}%</b> | RAM: <b>${node.mem_usage}%</b> | Disk: <b>${node.disk_usage}%</b>
+                    </div>
+                    <div class="mt-2">
+                        ${serviceBadges}
+                    </div>
+                </div>`;
+        });
+    });
+</script>
+</body>
+</html>
